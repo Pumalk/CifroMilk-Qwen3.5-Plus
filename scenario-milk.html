@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ЦифроМлк - Сливки, творог, молоко</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Сценарий: Молоко и творог</h1>
+            <a href="choose-direction.html" class="back-link">← Выбор направления</a>
+        </header>
+        <main>
+            <!-- Блок сепарирования -->
+            <section class="card">
+                <h2>1. Сепарирование</h2>
+                <div class="form-group">
+                    <label for="sep-losses">Потери при сепарировании (%)</label>
+                    <input type="number" id="sep-losses" step="0.1" min="0" value="0.3" class="loss-input">
+                    <span class="error-msg"></span>
+                </div>
+                <div class="form-group">
+                    <label for="cream-fat-target">Жирность сливок (%)</label>
+                    <input type="number" id="cream-fat-target" step="0.1" min="0" value="35">
+                </div>
+            </section>
+
+            <!-- Питьевое молоко -->
+            <section class="card">
+                <h2>2. Питьевое молоко</h2>
+                <div class="form-group checkbox-group">
+                    <label>
+                        <input type="checkbox" id="milk-check" checked> Производить питьевое молоко
+                    </label>
+                </div>
+                <div id="milk-block">
+                    <div class="form-group">
+                        <label for="milk-volume-target">Желаемый объём (л)</label>
+                        <input type="number" id="milk-volume-target" step="0.1" min="0">
+                        <span class="error-msg"></span>
+                    </div>
+                    <div class="form-group">
+                        <label for="milk-fat-target">Жирность</label>
+                        <select id="milk-fat-select">
+                            <option value="3.2">3.2%</option>
+                            <option value="2.5">2.5%</option>
+                            <option value="1.5">1.5%</option>
+                            <option value="custom">Своя</option>
+                        </select>
+                        <input type="number" id="milk-fat-custom" step="0.1" min="0" placeholder="%" style="display:none; margin-top:5px;">
+                    </div>
+                    <div class="form-group">
+                        <label for="milk-losses">Технологические потери (%)</label>
+                        <input type="number" id="milk-losses" step="0.1" min="0" value="0" class="loss-input">
+                        <span class="error-msg"></span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Сметана -->
+            <section class="card">
+                <h2>3. Сметана</h2>
+                <div class="form-group checkbox-group">
+                    <label>
+                        <input type="checkbox" id="sourcream-check"> Использовать сливки для сметаны
+                    </label>
+                </div>
+                <div id="sourcream-block" style="display:none;">
+                    <div class="form-group">
+                        <label for="sourcream-fat">Жирность сметаны (%)</label>
+                        <input type="number" id="sourcream-fat" step="0.1" min="0" value="20">
+                    </div>
+                    <div class="form-group">
+                        <label for="starter-pct">Норма закваски (%)</label>
+                        <input type="number" id="starter-pct" step="0.1" min="0" value="3">
+                    </div>
+                    <div class="form-group">
+                        <label for="sourcream-losses">Потери (%)</label>
+                        <input type="number" id="sourcream-losses" step="0.1" min="0" value="0" class="loss-input">
+                        <span class="error-msg"></span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Творог -->
+            <section class="card">
+                <h2>4. Творог</h2>
+                <div class="form-group checkbox-group">
+                    <label>
+                        <input type="checkbox" id="tvorog-check" checked> Производить творог
+                    </label>
+                </div>
+                <div id="tvorog-block">
+                    <div class="form-group">
+                        <label for="tvorog-fat">Жирность творога (%)</label>
+                        <select id="tvorog-fat-select">
+                            <option value="5">5%</option>
+                            <option value="9">9%</option>
+                            <option value="18">18%</option>
+                            <option value="custom">Своя</option>
+                        </select>
+                        <input type="number" id="tvorog-fat-custom" step="0.1" min="0" placeholder="%" style="display:none; margin-top:5px;">
+                    </div>
+                    <div class="form-group">
+                        <label for="tvorog-moisture">Влажность обезжиренного творога (%)</label>
+                        <input type="number" id="tvorog-moisture" step="0.1" min="0" value="80">
+                    </div>
+                    <div class="form-group">
+                        <label for="tvorog-losses">Потери (%)</label>
+                        <input type="number" id="tvorog-losses" step="0.1" min="0" value="1.8" class="loss-input">
+                        <span class="error-msg"></span>
+                    </div>
+                </div>
+            </section>
+
+            <button id="calc-btn" class="btn btn-primary btn-block">Рассчитать</button>
+            
+            <div id="results-area" class="card results" style="display:none;">
+                <h3>Результаты</h3>
+                <div id="results-content"></div>
+                <button id="save-journal-btn" class="btn btn-secondary btn-block mt-2">Сохранить в журнал</button>
+            </div>
+        </main>
+    </div>
+    <div id="toast-container"></div>
+    <script src="script.js"></script>
+</body>
+</html>

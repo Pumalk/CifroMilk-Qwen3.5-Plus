@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ЦифроМлк - Сыр и сливки</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Сценарий: Сыр и сливки</h1>
+            <a href="choose-direction.html" class="back-link">← Выбор направления</a>
+        </header>
+        <main>
+            <!-- Сепарирование -->
+            <section class="card">
+                <h2>1. Сепарирование</h2>
+                <div class="form-group">
+                    <label for="sep-losses">Потери при сепарировании (%)</label>
+                    <input type="number" id="sep-losses" step="0.1" min="0" value="0.3" class="loss-input">
+                    <span class="error-msg"></span>
+                </div>
+                <div class="form-group">
+                    <label for="cream-fat-target">Жирность сливок (%)</label>
+                    <input type="number" id="cream-fat-target" step="0.1" min="0" value="35">
+                </div>
+            </section>
+
+            <!-- Сыр -->
+            <section class="card">
+                <h2>2. Сыр (Качотта)</h2>
+                <div class="form-group">
+                    <label for="mdzhsv">МДЖСВ (%)</label>
+                    <input type="number" id="mdzhsv" step="0.1" min="0" max="100" value="45">
+                </div>
+                <div class="form-group">
+                    <label>Коэффициент К</label>
+                    <input type="text" id="k-coeff" readonly style="background:#eee;">
+                </div>
+                <div class="form-group">
+                    <label for="cheese-protein">Белок в молоке (%)</label>
+                    <input type="number" id="cheese-protein" step="0.1" min="0" placeholder="Авто или вручную">
+                </div>
+                <div class="grid-2">
+                    <div class="form-group">
+                        <label for="starter-rate">Закваска (г/л)</label>
+                        <input type="number" id="starter-rate" step="0.1" min="0" value="0.2">
+                    </div>
+                    <div class="form-group">
+                        <label for="enzyme-rate">Фермент (мл/л)</label>
+                        <input type="number" id="enzyme-rate" step="0.1" min="0" value="0.4">
+                    </div>
+                    <div class="form-group">
+                        <label for="cacl2-rate">CaCl₂ (г/л)</label>
+                        <input type="number" id="cacl2-rate" step="0.1" min="0" value="0.3">
+                    </div>
+                    <div class="form-group">
+                        <label for="cheese-losses">Потери прессования/созрев (%)</label>
+                        <input type="number" id="cheese-losses" step="0.1" min="0" value="0" class="loss-input">
+                        <span class="error-msg"></span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- После созревания -->
+            <section class="card">
+                <h2>3. После созревания (Факт)</h2>
+                <div class="grid-2">
+                    <div class="form-group">
+                        <label for="fact-mass">Масса сыра (кг)</label>
+                        <input type="number" id="fact-mass" step="0.1" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="fact-fat">Жирность сыра (%)</label>
+                        <input type="number" id="fact-fat" step="0.1" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="fact-moisture">Влажность сыра (%)</label>
+                        <input type="number" id="fact-moisture" step="0.1" min="0">
+                    </div>
+                </div>
+                <button id="calc-fact-btn" class="btn btn-secondary">Рассчитать фактические показатели</button>
+                <div id="fact-results" class="mt-2"></div>
+            </section>
+
+            <button id="calc-btn" class="btn btn-primary btn-block">Рассчитать нормализацию</button>
+
+            <div id="results-area" class="card results" style="display:none;">
+                <h3>Результаты нормализации</h3>
+                <div id="results-content"></div>
+                <button id="save-journal-btn" class="btn btn-secondary btn-block mt-2">Сохранить в журнал</button>
+            </div>
+        </main>
+    </div>
+    <div id="toast-container"></div>
+    <script src="script.js"></script>
+</body>
+</html>

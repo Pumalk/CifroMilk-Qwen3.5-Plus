@@ -1,609 +1,601 @@
-// Конфигурация и константы
-const CONFIG = {
-    densities: {
-        milk: 1.030,
-        skimmedMilk: 1.035, // Обрат
-        cream: 1.015,       // Сливки 20%
-    },
-    fat: {
-        skimmedMilk: 0.05,
-        creamDefault: 20.0,
-        sourCream: 20.0,
-    },
-    dryMatterSkimmedMilk: 8.5, // СВ обрата %
-    moistureSkimmedCurd: 80.0, // Влажность обезжиренного творога %
-    fatSkimmedCurd: 0.2,       // Жирность обезжиренного творога %
-    spoons: {
-        tspGram: 5,
-        tbspGram: 15,
-        tspMl: 5,
-        tbspMl: 15,
-    }
+/* --- CONSTANTS & CONFIG --- */
+const STORAGE = {
+    MILK: 'milkData',
+    SEP: 'separationResults',
+    JOURNAL: 'journal'
 };
 
-// Утилиты
-function litersToKg(vol, density) {
-    return vol * density;
+const DENSITIES = {
+    MILK: 1.030,
+    CREAM: 1.010,
+    SKIM: 1.035
+};
+
+/* --- STORAGE HELPERS --- */
+function saveData(key, data) {
+    localStorage.setItem(key, JSON.stringify(data));
 }
 
-function kgToLiters(mass, density) {
-    return mass / density;
-}
-
-function formatNum(num, decimals = 2) {
-    if (isNaN(num)) return "0";
-    return Number(num).toFixed(decimals);
-}
-
-function getMilkData() {
-    const data = localStorage.getItem('milkData');
+function getData(key) {
+    const data = localStorage.getItem(key);
     return data ? JSON.parse(data) : null;
 }
 
-function saveMilkData(data) {
-    localStorage.setItem('milkData', JSON.stringify(data));
+function clearData(key) {
+    localStorage.removeItem(key);
 }
 
-function addToJournal(entry) {
-    let journal = JSON.parse(localStorage.getItem('journal') || '[]');
-    entry.id = Date.now();
-    entry.dateStr = new Date().toLocaleString('ru-RU');
-    journal.unshift(entry); // Новые сверху
-    localStorage.setItem('journal', JSON.stringify(journal));
+/* --- UI HELPERS --- */
+function showToast(message, type = 'success') {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    container.appendChild(toast);
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
 }
 
-function getJournal() {
-    return JSON.parse(localStorage.getItem('journal') || '[]');
+function validateInput(id, required = true) {
+    const el = document.getElementById(id);
+    if (!el) return { valid: true, value: null };
+    const val = parseFloat(el.value);
+    const errorSpan = el.parentElement.querySelector('.error-msg');
+    
+    if (required && (el.value === '' || isNaN(val))) {
+        if (errorSpan) errorSpan.textContent = 'Обязательное поле';
+        el.style.borderColor = 'var(--error)';
+        return { valid: false, value: null };
+    }
+    
+    if (!isNaN(val) && val < 0) {
+        if (errorSpan) errorSpan.textContent = 'Значение не может быть отрицательным';
+        el.style.borderColor = 'var(--error)';
+        return { valid: false, value: null };
+    }
+
+    if (errorSpan) errorSpan.textContent = '';
+    el.style.borderColor = '#ddd';
+    return { valid: true, value: val };
 }
 
-function clearJournal() {
-    if(confirm('Вы уверены, что хотите очистить весь журнал?')) {
-        localStorage.removeItem('journal');
-        renderJournal();
+function checkLosses(inputId) {
+    const el = document.getElementById(inputId);
+    if (!el) return;
+    const val = parseFloat(el.value) || 0;
+    if (val > 5) {
+        el.classList.add('high-loss');
+    } else {
+        el.classList.remove('high-loss');
     }
 }
 
-// Проверка наличия данных при загрузке страниц (кроме index и journal)
-function checkMilkDataRedirect() {
-    if (window.location.pathname.includes('index.html') || window.location.pathname.includes('journal.html')) return;
-    
-    const data = getMilkData();
-    if (!data) {
-        alert('Сначала введите исходные данные о молоке на главной странице!');
+function guardRoute() {
+    const path = window.location.pathname;
+    if (path.includes('index.html') || path.endsWith('/')) return;
+    if (!getData(STORAGE.MILK)) {
+        showToast('Сначала заполните исходные данные', 'error');
         window.location.href = 'index.html';
     }
-    return data;
 }
 
-// Инициализация при загрузке DOM
-document.addEventListener('DOMContentLoaded', () => {
-    const path = window.location.pathname;
+/* --- CALCULATION LOGIC --- */
+function calcSeparation(milkVol, milkFat, milkDensity, losses, creamFatTarget = 35) {
+    const mMilk = milkVol * milkDensity;
+    // Формула из ТЗ: M_cream = M_milk * (fat_milk – 0.05) / (cream_fat – 0.05)
+    // Примечание: жирности в формуле в долях (0.04), но в 입력 в процентах (4.0). Приводим.
+    const fMilk = milkFat / 100;
+    const fCream = creamFatTarget / 100;
+    
+    let mCream = mMilk * (fMilk - 0.0005) / (fCream - 0.0005); // 0.05% = 0.0005
+    if (mCream < 0) mCream = 0;
+    
+    let mSkim = mMilk - mCream;
+    
+    // Применяем потери
+    const lossFactor = 1 - (losses / 100);
+    // Распределяем потери пропорционально или вычитаем из общей массы. 
+    // По ТЗ: "M_milk = M_cream + M_skim + M_milk * losses_sep/100"
+    // Упростим: уменьшим массу продуктов на процент потерь от исходной массы
+    const totalLossMass = mMilk * (losses / 100);
+    // Вычтем потери пропорционально массе сливок и обрата
+    const ratioCream = mCream / (mCream + mSkim || 1);
+    mCream = mCream - (totalLossMass * ratioCream);
+    mSkim = mSkim - (totalLossMass * (1 - ratioCream));
 
-    // Инициализация страницы ввода
-    if (path.includes('index.html') || path === '/' && !path.includes('.html')) {
-        initIndex();
-    }
-    // Инициализация страницы молока
-    else if (path.includes('milk.html')) {
-        initMilk();
-    }
-    // Инициализация сепарирования
-    else if (path.includes('separation.html')) {
-        initSeparation();
-    }
-    // Инициализация творога
-    else if (path.includes('cottagecheese.html')) {
-        initCottageCheese();
-    }
-    // Инициализация сыра
-    else if (path.includes('cheese.html')) {
-        initCheese();
-    }
-    // Инициализация журнала
-    else if (path.includes('journal.html')) {
-        initJournal();
-    }
-});
+    if (mCream < 0) mCream = 0;
+    if (mSkim < 0) mSkim = 0;
 
-// --- Логика страницы INDEX ---
+    return {
+        creamMass: mCream,
+        creamVolume: mCream / DENSITIES.CREAM,
+        creamFat: creamFatTarget,
+        skimMass: mSkim,
+        skimVolume: mSkim / DENSITIES.SKIM,
+        skimFat: 0.05, // Стандартное содержание жира в обрате
+        losses: losses
+    };
+}
+
+function calcNormalization(currentVol, currentFat, targetFat, componentFat, componentDensity) {
+    // Квадрат Пирсона
+    // M_add = M_milk * (fat_milk - target_fat) / (target_fat - add_fat)
+    // Работаем с массами
+    const mMilk = currentVol * DENSITIES.MILK; // Приблизительно
+    const fMilk = currentFat / 100;
+    const fTarget = targetFat / 100;
+    const fComp = componentFat / 100;
+
+    if (Math.abs(fTarget - fComp) < 0.0001) return null; // Деление на ноль
+
+    const mAdd = mMilk * (fMilk - fTarget) / (fTarget - fComp);
+    return {
+        mass: mAdd,
+        volume: mAdd / componentDensity
+    };
+}
+
+/* --- PAGE INITIALIZERS --- */
+
 function initIndex() {
-    const form = document.getElementById('milkForm');
-    const existingData = getMilkData();
+    const form = document.getElementById('milk-form');
+    if (!form) return;
 
-    if (existingData) {
-        document.getElementById('volume').value = existingData.volume;
-        document.getElementById('fat').value = existingData.fat;
-        document.getElementById('density').value = existingData.density;
-        document.getElementById('protein').value = existingData.protein || '';
+    // Заполнение плотности по умолчанию, если нет данных
+    if (!document.getElementById('density').value) {
+        document.getElementById('density').value = 1.030;
     }
 
     form.addEventListener('submit', (e) => {
         e.preventDefault();
-        const volume = parseFloat(document.getElementById('volume').value);
-        const fat = parseFloat(document.getElementById('fat').value);
-        const density = parseFloat(document.getElementById('density').value) || CONFIG.densities.milk;
-        const protein = parseFloat(document.getElementById('protein').value);
+        const vVol = validateInput('volume');
+        const vFat = validateInput('fat');
+        const vDen = validateInput('density', false);
+        const vProt = validateInput('protein', false);
 
-        if (!volume || !fat || volume <= 0 || fat < 0) {
-            alert('Пожалуйста, заполните обязательные поля корректно.');
+        if (!vVol.valid || !vFat.valid) {
+            showToast('Проверьте заполнение обязательных полей', 'error');
             return;
         }
 
-        const data = { volume, fat, density, protein };
-        saveMilkData(data);
-        
-        const resultBox = document.getElementById('resultBox');
-        resultBox.className = 'result-box success';
-        resultBox.innerHTML = `<strong>Данные сохранены!</strong><br>Объём: ${volume} л, Жирность: ${fat}%, Плотность: ${density}`;
-        resultBox.style.display = 'block';
+        const data = {
+            volume: vVol.value,
+            fat: vFat.value,
+            density: vDen.valid ? vDen.value : 1.030,
+            protein: vProt.valid ? vProt.value : null,
+            timestamp: new Date().toISOString()
+        };
+
+        saveData(STORAGE.MILK, data);
+        clearData(STORAGE.SEP); // Сброс результатов сепарирования при новом молоке
+        showToast('Исходные данные сохранены');
+        window.location.href = 'choose-direction.html';
     });
 }
 
-// --- Логика страницы MILK ---
-function initMilk() {
-    const milk = checkMilkDataRedirect();
-    if (!milk) return;
+function initChoose() {
+    // Просто проверка доступа
+    guardRoute();
+}
 
-    const targetFatSelect = document.getElementById('targetFatSelect');
-    const customFatInput = document.getElementById('customFatInput');
+function initScenarioMilk() {
+    guardRoute();
+    const milkData = getData(STORAGE.MILK);
+    if (!milkData) return;
+
+    // Toggle UI
+    document.getElementById('milk-check').addEventListener('change', (e) => {
+        document.getElementById('milk-block').style.display = e.target.checked ? 'block' : 'none';
+    });
+    document.getElementById('sourcream-check').addEventListener('change', (e) => {
+        document.getElementById('sourcream-block').style.display = e.target.checked ? 'block' : 'none';
+    });
+    document.getElementById('tvorog-check').addEventListener('change', (e) => {
+        document.getElementById('tvorog-block').style.display = e.target.checked ? 'block' : 'none';
+    });
     
-    targetFatSelect.addEventListener('change', () => {
-        if (targetFatSelect.value === 'custom') {
-            customFatInput.classList.remove('hidden');
-        } else {
-            customFatInput.classList.add('hidden');
+    document.getElementById('milk-fat-select').addEventListener('change', (e) => {
+        document.getElementById('milk-fat-custom').style.display = e.target.value === 'custom' ? 'block' : 'none';
+    });
+    document.getElementById('tvorog-fat-select').addEventListener('change', (e) => {
+        document.getElementById('tvorog-fat-custom').style.display = e.target.value === 'custom' ? 'block' : 'none';
+    });
+
+    // Losses highlight
+    ['sep-losses', 'milk-losses', 'sourcream-losses', 'tvorog-losses'].forEach(id => {
+        const el = document.getElementById(id);
+        if(el) {
+            el.addEventListener('input', () => checkLosses(id));
+            checkLosses(id);
         }
     });
 
-    document.getElementById('calcBtn').addEventListener('click', () => {
-        const type = document.querySelector('input[name="milkType"]:checked').value;
-        const losses = parseFloat(document.getElementById('losses').value) || 0;
-        let targetFat = 0;
+    document.getElementById('calc-btn').addEventListener('click', () => {
+        // 1. Separation
+        const vSepLoss = validateInput('sep-losses', false);
+        const vCreamFat = validateInput('cream-fat-target', false);
+        const lossesSep = vSepLoss.valid ? vSepLoss.value : 0.3;
+        const creamFatTarget = vCreamFat.valid ? vCreamFat.value : 35;
 
-        if (type === 'normalized') {
-            const selected = targetFatSelect.value;
-            if (selected === 'custom') {
-                targetFat = parseFloat(customFatInput.value);
-            } else {
-                targetFat = parseFloat(selected);
+        const sepRes = calcSeparation(milkData.volume, milkData.fat, milkData.density, lossesSep, creamFatTarget);
+        saveData(STORAGE.SEP, { ...sepRes, timestamp: new Date().toISOString() });
+
+        let resultsHtml = `<h4>Сепарирование:</h4><ul>
+            <li>Сливки: ${sepRes.creamVolume.toFixed(2)} л (${sepRes.creamMass.toFixed(2)} кг)</li>
+            <li>Обрат: ${sepRes.skimVolume.toFixed(2)} л (${sepRes.skimMass.toFixed(2)} кг)</li>
+            <li>Потери: ${lossesSep}%</li>
+        </ul>`;
+
+        let hasError = false;
+
+        // 2. Milk
+        if (document.getElementById('milk-check').checked) {
+            const vVolT = validateInput('milk-volume-target');
+            const vLoss = validateInput('milk-losses', false);
+            let targetFat = parseFloat(document.getElementById('milk-fat-select').value);
+            if (document.getElementById('milk-fat-select').value === 'custom') {
+                const vCustom = validateInput('milk-fat-custom');
+                if (!vCustom.valid) { hasError = true; }
+                else targetFat = vCustom.value;
+            }
+
+            if (!vVolT.valid || !vLoss.valid) hasError = true;
+
+            if (!hasError) {
+                // Logic: Normalize whole milk to target fat using skim or cream
+                // Simplified: Check if we have enough skim/cream to adjust whole milk batch to target
+                // For this scenario, let's assume we take part of whole milk + add skim/cream
+                // But prompt says: "Desired volume of drinking milk".
+                // Let's assume we normalize the Whole Milk to Target Fat.
+                
+                const norm = calcNormalization(milkData.volume, milkData.fat, targetFat, sepRes.skimFat, DENSITIES.SKIM);
+                // If target < milkFat, we need skim. If target > milkFat, we need cream.
+                
+                let addVol = 0;
+                let addType = '';
+                
+                if (targetFat < milkData.fat) {
+                    // Need skim
+                    if (norm && norm.volume > 0) {
+                        if (norm.volume > sepRes.skimVolume) {
+                            resultsHtml += `<li class="text-error">Нехватка обрата для молока! Нужно ${norm.volume.toFixed(2)} л, есть ${sepRes.skimVolume.toFixed(2)} л</li>`;
+                            hasError = true;
+                        } else {
+                            addVol = norm.volume;
+                            addType = 'обрата';
+                        }
+                    }
+                } else {
+                    // Need cream
+                     if (norm && norm.volume > 0) { // Formula gives negative if target > current using skim logic, need flip
+                        // Recalc for cream
+                        const normCream = calcNormalization(milkData.volume, milkData.fat, targetFat, creamFatTarget, DENSITIES.CREAM);
+                        if (normCream && normCream.volume > 0) {
+                             if (normCream.volume > sepRes.creamVolume) {
+                                resultsHtml += `<li class="text-error">Нехватка сливок для молока!</li>`;
+                                hasError = true;
+                            } else {
+                                addVol = normCream.volume;
+                                addType = 'сливок';
+                            }
+                        }
+                     }
+                }
+
+                if (!hasError) {
+                    const finalVol = (milkData.volume + addVol) * (1 - (vLoss.value || 0)/100);
+                    resultsHtml += `<h4>Питьевое молоко:</h4><ul>
+                        <li>Добавлено ${addType}: ${addVol.toFixed(2)} л</li>
+                        <li>Итоговый объём: ${finalVol.toFixed(2)} л</li>
+                    </ul>`;
+                }
             }
         }
 
-        const resultBox = document.getElementById('resultBox');
+        // 3. Sour Cream
+        if (document.getElementById('sourcream-check').checked && !hasError) {
+            const vFat = validateInput('sourcream-fat', false);
+            const vStart = validateInput('starter-pct', false);
+            const vLoss = validateInput('sourcream-losses', false);
+            
+            if (vFat.valid && vFat.value > creamFatTarget) {
+                resultsHtml += `<li class="text-error">Жирность сметаны не может быть выше жирности сливок</li>`;
+                hasError = true;
+            } else if (!hasError) {
+                const volSC = sepRes.creamVolume * (1 - (vLoss.value||0)/100);
+                const starterVol = sepRes.creamVolume * (vStart.value||0) / 100;
+                resultsHtml += `<h4>Сметана:</h4><ul>
+                    <li>Объём сметаны: ${volSC.toFixed(2)} л</li>
+                    <li>Закваска: ${starterVol.toFixed(2)} л (${(starterVol*1000/5).toFixed(0)} ч.л.)</li>
+                </ul>`;
+            }
+        }
+
+        // 4. Cottage Cheese
+        if (document.getElementById('tvorog-check').checked && !hasError) {
+            const vLoss = validateInput('tvorog-losses', false);
+            let targetFat = parseFloat(document.getElementById('tvorog-fat-select').value);
+            if (document.getElementById('tvorog-fat-select').value === 'custom') {
+                const vC = validateInput('tvorog-fat-custom');
+                if(vC.valid) targetFat = vC.value;
+            }
+            const vMoist = validateInput('tvorog-moisture', false);
+
+            if (!vLoss.valid || !vMoist.valid) hasError = true;
+
+            if (!hasError) {
+                // Simplified Tvorog Calc based on prompt logic
+                // M_tvorog_skim = M_skim * (8.5/100) / ((100 - moisture)/100)
+                // 8.5% protein in skim assumption? Prompt says 8.5.
+                const mTvorogSkim = sepRes.skimMass * 0.085 / ((100 - (vMoist.value||80))/100);
+                
+                let mCreamAdd = 0;
+                if (targetFat > 0.2) { // 0.2% fat in skim tvorog base
+                     // M_cream_add = M_tvorog_skim * (target_fat – 0.2) / (cream_fat – target_fat)
+                     // Careful with units (percent vs fraction)
+                     const tf = targetFat / 100;
+                     const cf = creamFatTarget / 100;
+                     if (cf > tf) {
+                         mCreamAdd = mTvorogSkim * (tf - 0.002) / (cf - tf);
+                     }
+                }
+
+                if (mCreamAdd > sepRes.creamMass) {
+                    resultsHtml += `<li class="text-error">Нехватка сливок для творога!</li>`;
+                    hasError = true;
+                } else {
+                    const mTotal = (mTvorogSkim + mCreamAdd) * (1 - (vLoss.value||0)/100);
+                    resultsHtml += `<h4>Творог:</h4><ul>
+                        <li>Масса творога: ${mTotal.toFixed(2)} кг</li>
+                        <li>Добавлено сливок: ${(mCreamAdd/DENSITIES.CREAM).toFixed(2)} л</li>
+                    </ul>`;
+                }
+            }
+        }
+
+        const resArea = document.getElementById('results-area');
+        const resContent = document.getElementById('results-content');
         
-        // Валидация
-        if (type === 'normalized' && (!targetFat || targetFat < 0)) {
-            resultBox.className = 'result-box error';
-            resultBox.innerHTML = 'Ошибка: Укажите корректную целевую жирность.';
+        if (hasError) {
+            resContent.innerHTML = `<p class="text-error">Расчёт невозможен из-за нехватки компонентов или ошибок ввода.</p>` + resultsHtml;
+            resArea.style.display = 'block';
+            resArea.style.borderLeftColor = 'var(--error)';
+        } else {
+            resContent.innerHTML = resultsHtml;
+            resArea.style.display = 'block';
+            resArea.style.borderLeftColor = 'var(--success)';
+            showToast('Расчёт выполнен');
+        }
+    });
+
+    document.getElementById('save-journal-btn').addEventListener('click', () => {
+        const entry = {
+            date: new Date().toLocaleString(),
+            scenario: 'milk',
+            input: {
+                lossesSep: document.getElementById('sep-losses').value,
+                milkCheck: document.getElementById('milk-check').checked,
+                // ... capture other inputs
+            },
+            results: document.getElementById('results-content').innerText
+        };
+        const journal = getData(STORAGE.JOURNAL) || [];
+        journal.unshift(entry);
+        saveData(STORAGE.JOURNAL, journal);
+        showToast('Сохранено в журнал');
+    });
+}
+
+function initScenarioCheese() {
+    guardRoute();
+    const milkData = getData(STORAGE.MILK);
+    if (!milkData) return;
+
+    // Calc K coeff on input change
+    const mdzhsvInput = document.getElementById('mdzhsv');
+    const kInput = document.getElementById('k-coeff');
+    function updateK() {
+        let val = parseFloat(mdzhsvInput.value) || 45;
+        // Interpolate 1.98 (45%) to 2.16 (50%)
+        let k = 1.98 + (val - 45) * (2.16 - 1.98) / (50 - 45);
+        if (val < 45) k = 1.98;
+        if (val > 50) k = 2.16;
+        kInput.value = k.toFixed(3);
+    }
+    mdzhsvInput.addEventListener('input', updateK);
+    updateK();
+
+    // Auto protein
+    const protInput = document.getElementById('cheese-protein');
+    if (!milkData.protein) {
+        // B = 0.5*Zh + 1.3
+        const calcProt = 0.5 * milkData.fat + 1.3;
+        protInput.value = calcProt.toFixed(2);
+    } else {
+        protInput.value = milkData.protein;
+    }
+
+    ['sep-losses', 'cheese-losses'].forEach(id => {
+        const el = document.getElementById(id);
+        if(el) {
+            el.addEventListener('input', () => checkLosses(id));
+            checkLosses(id);
+        }
+    });
+
+    document.getElementById('calc-btn').addEventListener('click', () => {
+        // Separation first
+        const vSepLoss = validateInput('sep-losses', false);
+        const lossesSep = vSepLoss.valid ? vSepLoss.value : 0.3;
+        const creamFatTarget = parseFloat(document.getElementById('cream-fat-target').value) || 35;
+        
+        const sepRes = calcSeparation(milkData.volume, milkData.fat, milkData.density, lossesSep, creamFatTarget);
+        saveData(STORAGE.SEP, { ...sepRes, timestamp: new Date().toISOString() });
+
+        // Cheese Norm
+        const k = parseFloat(kInput.value);
+        const protein = parseFloat(protInput.value);
+        const mdzhsv = parseFloat(mdzhsvInput.value);
+        
+        // Ж_нм = К * Б_ц * МДЖСВ / 100
+        const targetFatNorm = k * protein * mdzhsv / 100;
+        
+        let resultsHtml = `<h4>Нормализация для сыра:</h4><ul>
+            <li>Целевая жирность нормализованного молока: ${targetFatNorm.toFixed(2)}%</li>`;
+        
+        let hasError = false;
+        let addVol = 0;
+
+        if (targetFatNorm < milkData.fat) {
+            // Need Skim
+            const norm = calcNormalization(milkData.volume, milkData.fat, targetFatNorm, 0.05, DENSITIES.SKIM);
+            if (norm && norm.volume > 0) {
+                if (norm.volume > sepRes.skimVolume) {
+                    resultsHtml += `<li class="text-error">Нехватка обрата!</li>`;
+                    hasError = true;
+                } else {
+                    addVol = norm.volume;
+                    resultsHtml += `<li>Добавить обрат: ${addVol.toFixed(2)} л</li>`;
+                }
+            }
+        } else {
+            // Need Cream
+            const norm = calcNormalization(milkData.volume, milkData.fat, targetFatNorm, creamFatTarget, DENSITIES.CREAM);
+            if (norm && norm.volume > 0) {
+                 if (norm.volume > sepRes.creamVolume) {
+                    resultsHtml += `<li class="text-error">Нехватка сливок!</li>`;
+                    hasError = true;
+                } else {
+                    addVol = norm.volume;
+                    resultsHtml += `<li>Добавить сливки: ${addVol.toFixed(2)} л</li>`;
+                }
+            }
+        }
+
+        const volNorm = milkData.volume + addVol;
+        resultsHtml += `<li>Объём нормализованного молока: ${volNorm.toFixed(2)} л</li></ul>`;
+
+        // Dosages
+        const sRate = parseFloat(document.getElementById('starter-rate').value) || 0;
+        const eRate = parseFloat(document.getElementById('enzyme-rate').value) || 0;
+        const cRate = parseFloat(document.getElementById('cacl2-rate').value) || 0;
+
+        resultsHtml += `<h4>Дозировки:</h4><ul>
+            <li>Закваска: ${(volNorm * sRate).toFixed(1)} г (${(volNorm * sRate / 5).toFixed(1)} ч.л.)</li>
+            <li>Фермент: ${(volNorm * eRate).toFixed(1)} мл (${(volNorm * eRate / 5).toFixed(1)} ч.л.)</li>
+            <li>CaCl₂: ${(volNorm * cRate).toFixed(1)} г</li>
+        </ul>`;
+
+        const resArea = document.getElementById('results-area');
+        const resContent = document.getElementById('results-content');
+        resContent.innerHTML = resultsHtml;
+        resArea.style.display = 'block';
+        
+        if (!hasError) showToast('Расчёт выполнен');
+    });
+
+    document.getElementById('calc-fact-btn').addEventListener('click', () => {
+        const m = parseFloat(document.getElementById('fact-mass').value);
+        const f = parseFloat(document.getElementById('fact-fat').value);
+        const w = parseFloat(document.getElementById('fact-moisture').value);
+        const outDiv = document.getElementById('fact-results');
+
+        if (!m || !f || !w) {
+            outDiv.innerHTML = '<span class="text-error">Заполните все поля</span>';
             return;
         }
 
-        let html = '';
-        const massMilk = litersToKg(milk.volume, milk.density);
-        
-        if (type === 'whole') {
-            const finalVol = milk.volume * (1 - losses / 100);
-            const finalMass = massMilk * (1 - losses / 100);
-            html = `
-                <h3>Результат (Отборное молоко)</h3>
-                <p>Итоговый объём: <strong>${formatNum(finalVol)} л</strong></p>
-                <p>Итоговая масса: <strong>${formatNum(finalMass)} кг</strong></p>
-                <p>Потери составили: ${losses}%</p>
-            `;
-        } else {
-            // Нормализация (Квадрат Пирсона упрощенный через баланс массы)
-            let addFat, addDensity, addName, addTypeRu;
-            
-            if (targetFat < milk.fat) {
-                // Нужен обрат
-                addFat = CONFIG.fat.skimmedMilk;
-                addDensity = CONFIG.densities.skimmedMilk;
-                addName = 'обрата';
-                addTypeRu = 'обрат';
-            } else if (targetFat > milk.fat) {
-                // Нужны сливки
-                addFat = CONFIG.fat.creamDefault;
-                addDensity = CONFIG.densities.cream;
-                addName = 'сливок (20%)';
-                addTypeRu = 'сливки';
-            } else {
-                 resultBox.className = 'result-box warning';
-                 resultBox.innerHTML = 'Целевая жирность совпадает с исходной. Добавки не требуются.';
-                 return;
-            }
+        // МДЖСВ = fat_cheese * 100 / (100 – moisture_cheese)
+        const mdzhsvFact = f * 100 / (100 - w);
+        outDiv.innerHTML = `<p>Фактическая МДЖСВ: <strong>${mdzhsvFact.toFixed(2)}%</strong></p>`;
+    });
 
-            // Проверка невозможности (теоретически, если цель ниже обрата или выше сливок)
-            if (targetFat < addFat || (addTypeRu === 'сливки' && targetFat > addFat)) {
-                 // Упрощенная проверка: если цель меньше жира добавки (для случая добавления сливок это ок, для обрата - нет)
-                 // Главное ограничение: нельзя получить жирность ниже жира обрата (0.05) или выше жира сливок (20), если смешиваем только их.
-                 if (targetFat < CONFIG.fat.skimmedMilk || targetFat > CONFIG.fat.creamDefault) {
-                     resultBox.className = 'result-box error';
-                     resultBox.innerHTML = `Невозможно достичь жирности ${targetFat}% используя доступные компоненты (диапазон ${CONFIG.fat.skimmedMilk}-${CONFIG.fat.creamDefault}%).`;
-                     return;
-                 }
-            }
-
-            // Расчет массы добавки: M_dob = M_mol * (J_mol - J_target) / (J_target - J_dob)
-            // Внимание: формула работает, если знаменатель не 0.
-            const massAdd = massMilk * (milk.fat - targetFat) / (targetFat - addFat);
-            
-            if (massAdd < 0) {
-                 // Это значит, что направление выбрано неверно логикой выше, но на всякий случай
-                 resultBox.className = 'result-box error';
-                 resultBox.innerHTML = 'Ошибка расчёта: проверьте входные данные.';
-                 return;
-            }
-
-            const volAdd = kgToLiters(massAdd, addDensity);
-            const totalMass = massMilk + massAdd;
-            const totalVol = milk.volume + volAdd;
-
-            const finalMass = totalMass * (1 - losses / 100);
-            const finalVol = totalVol * (1 - losses / 100);
-
-            html = `
-                <h3>Результат (Нормализованное молоко)</h3>
-                <p class="highlight">Добавьте: <strong>${formatNum(volAdd)} л</strong> (${formatNum(massAdd)} кг) <em>${addName}</em>.</p>
-                <div class="table-responsive">
-                    <table>
-                        <tr><th>Этап</th><th>Объём (л)</th><th>Масса (кг)</th></tr>
-                        <tr><td>Исходное молоко</td><td>${formatNum(milk.volume)}</td><td>${formatNum(massMilk)}</td></tr>
-                        <tr><td>Добавка (${addTypeRu})</td><td>${formatNum(volAdd)}</td><td>${formatNum(massAdd)}</td></tr>
-                        <tr><td><strong>Смесь до потерь</strong></td><td><strong>${formatNum(totalVol)}</strong></td><td><strong>${formatNum(totalMass)}</strong></td></tr>
-                        <tr><td><strong>Готовый продукт</strong> (потери ${losses}%)</td><td><strong>${formatNum(finalVol)}</strong></td><td><strong>${formatNum(finalMass)}</strong></td></tr>
-                    </table>
-                </div>
-            `;
-        }
-
-        resultBox.className = 'result-box success';
-        resultBox.innerHTML = html;
-        
-        // Кнопка сохранения
-        const saveBtn = document.getElementById('saveJournalBtn');
-        saveBtn.onclick = () => {
-            addToJournal({
-                type: 'milk',
-                input: { ...milk, type, targetFat, losses },
-                results: { html } // Сохраняем HTML для простоты отображения или пересчитываем
-            });
-            alert('Расчёт сохранён в журнал!');
+    document.getElementById('save-journal-btn').addEventListener('click', () => {
+        const entry = {
+            date: new Date().toLocaleString(),
+            scenario: 'cheese',
+            input: { mdzhsv: mdzhsvInput.value },
+            results: document.getElementById('results-content').innerText
         };
-        saveBtn.style.display = 'inline-block';
+        const journal = getData(STORAGE.JOURNAL) || [];
+        journal.unshift(entry);
+        saveData(STORAGE.JOURNAL, journal);
+        showToast('Сохранено в журнал');
     });
 }
 
-// --- Логика страницы SEPARATION ---
-function initSeparation() {
-    const milk = checkMilkDataRedirect();
-    if (!milk) return;
-
-    document.getElementById('calcBtn').addEventListener('click', () => {
-        const creamFat = parseFloat(document.getElementById('creamFat').value) || CONFIG.fat.creamDefault;
-        const creamDen = parseFloat(document.getElementById('creamDen').value) || CONFIG.densities.cream;
-        const skimDen = parseFloat(document.getElementById('skimDen').value) || CONFIG.densities.skimmedMilk;
-        const makeSourCream = document.getElementById('makeSourCream').checked;
-
-        const massMilk = litersToKg(milk.volume, milk.density);
-        const fatSkim = CONFIG.fat.skimmedMilk;
-
-        // Масса сливок: M_sl = M_mol * (J_mol - J_skim) / (J_sl - J_skim)
-        const massCream = massMilk * (milk.fat - fatSkim) / (creamFat - fatSkim);
-        
-        if (massCream < 0 || massCream > massMilk) {
-             const resBox = document.getElementById('resultBox');
-             resBox.className = 'result-box error';
-             resBox.innerHTML = 'Ошибка: Жирность сливок должна быть выше жирности молока и обрата.';
-             return;
-        }
-
-        const massSkim = massMilk - massCream;
-        const volCream = kgToLiters(massCream, creamDen);
-        const volSkim = kgToLiters(massSkim, skimDen);
-
-        let sourHtml = '';
-        if (makeSourCream) {
-            sourHtml = `<p>Объём сметаны (из сливок): <strong>${formatNum(volCream)} л</strong></p>`;
-        }
-
-        const html = `
-            <h3>Результаты сепарирования</h3>
-            <div class="table-responsive">
-                <table>
-                    <tr><th>Продукт</th><th>Масса (кг)</th><th>Объём (л)</th></tr>
-                    <tr><td>Сливки (${creamFat}%)</td><td>${formatNum(massCream)}</td><td>${formatNum(volCream)}</td></tr>
-                    <tr><td>Обрат (${fatSkim}%)</td><td>${formatNum(massSkim)}</td><td>${formatNum(volSkim)}</td></tr>
-                </table>
-            </div>
-            ${sourHtml}
-        `;
-
-        const resBox = document.getElementById('resultBox');
-        resBox.className = 'result-box success';
-        resBox.innerHTML = html;
-
-        document.getElementById('saveJournalBtn').onclick = () => {
-            addToJournal({
-                type: 'separation',
-                input: { ...milk, creamFat, makeSourCream },
-                results: { massCream, volCream, massSkim, volSkim }
-            });
-            alert('Расчёт сохранён в журнал!');
-        };
-        document.getElementById('saveJournalBtn').style.display = 'inline-block';
-    });
-}
-
-// --- Логика страницы COTTAGE CHEESE ---
-function initCottageCheese() {
-    const milk = checkMilkDataRedirect();
-    if (!milk) return;
-
-    const targetCurdFatSelect = document.getElementById('targetCurdFatSelect');
-    const customCurdFatInput = document.getElementById('customCurdFatInput');
-
-    targetCurdFatSelect.addEventListener('change', () => {
-        if (targetCurdFatSelect.value === 'custom') {
-            customCurdFatInput.classList.remove('hidden');
-        } else {
-            customCurdFatInput.classList.add('hidden');
-        }
-    });
-
-    document.getElementById('calcBtn').addEventListener('click', () => {
-        let targetFat = parseFloat(targetCurdFatSelect.value);
-        if (targetCurdFatSelect.value === 'custom') {
-            targetFat = parseFloat(customCurdFatInput.value);
-        }
-        
-        const moisture = parseFloat(document.getElementById('moisture').value) || CONFIG.moistureSkimmedCurd;
-        const creamFat = CONFIG.fat.creamDefault;
-        const creamDen = CONFIG.densities.cream;
-        const skimDen = CONFIG.densities.skimmedMilk;
-        const svSkim = CONFIG.dryMatterSkimmedMilk;
-        const fatSkimCurd = CONFIG.fatSkimmedCurd;
-
-        // 1. Сепарирование
-        const massMilk = litersToKg(milk.volume, milk.density);
-        const fatSkimRaw = CONFIG.fat.skimmedMilk;
-        const massCreamTotal = massMilk * (milk.fat - fatSkimRaw) / (creamFat - fatSkimRaw);
-        const massSkimTotal = massMilk - massCreamTotal;
-
-        // 2. Творог обезжиренный
-        // M_tv_ob = M_ob * (SV_ob / 100) / ((100 - Wl) / 100)
-        const massSkimCurd = massSkimTotal * (svSkim / 100) / ((100 - moisture) / 100);
-
-        // 3. Добавка сливок для жирности
-        // M_sl_dob = M_tv_ob * (J_tv - J_tv_ob) / (J_sl - J_tv)
-        if (targetFat <= fatSkimCurd) {
-             const resBox = document.getElementById('resultBox');
-             resBox.className = 'result-box error';
-             resBox.innerHTML = 'Целевая жирность творога должна быть выше жирности обезжиренного творога (~0.2%).';
-             return;
-        }
-        
-        const massCreamAdd = massSkimCurd * (targetFat - fatSkimCurd) / (creamFat - targetFat);
-        const volCreamAdd = kgToLiters(massCreamAdd, creamDen);
-        const totalCurdMass = massSkimCurd + massCreamAdd;
-
-        const html = `
-            <h3>Результаты (Творог ${targetFat}%)</h3>
-            <p>Из полученного обрата выйдет обезжиренного творога: <strong>${formatNum(massSkimCurd)} кг</strong>.</p>
-            <p class="highlight">Необходимо добавить сливок: <strong>${formatNum(volCreamAdd)} л</strong> (${formatNum(massCreamAdd)} кг).</p>
-            <p>Итоговая масса творога: <strong>${formatNum(totalCurdMass)} кг</strong>.</p>
-            <p><small>Примечание: Расчёт предполагает использование всего обрата от сепарирования данного объёма молока.</small></p>
-        `;
-
-        const resBox = document.getElementById('resultBox');
-        resBox.className = 'result-box success';
-        resBox.innerHTML = html;
-
-        document.getElementById('saveJournalBtn').onclick = () => {
-            addToJournal({
-                type: 'cottagecheese',
-                input: { ...milk, targetFat, moisture },
-                results: { totalCurdMass, creamAdd: volCreamAdd }
-            });
-            alert('Расчёт сохранён в журнал!');
-        };
-        document.getElementById('saveJournalBtn').style.display = 'inline-block';
-    });
-}
-
-// --- Логика страницы CHEESE ---
-function initCheese() {
-    const milk = checkMilkDataRedirect();
-    if (!milk) return;
-    if (!milk.protein) {
-        alert('Для расчёта сыра необходимо указать содержание белка на главной странице!');
-        window.location.href = 'index.html';
-        return;
-    }
-
-    // Интерполяция коэффициента K
-    function getK(fatInDM) {
-        if (fatInDM <= 45) return 1.98;
-        if (fatInDM >= 50) return 2.16;
-        // Линейная интерполяция
-        const k1 = 1.98, f1 = 45;
-        const k2 = 2.16, f2 = 50;
-        return k1 + (k2 - k1) * (fatInDM - f1) / (f2 - f1);
-    }
-
-    document.getElementById('calcBtn').addEventListener('click', () => {
-        const targetFatDM = parseFloat(document.getElementById('targetFatDM').value) || 45;
-        const lossCheese = parseFloat(document.getElementById('lossCheese').value) || 0;
-        
-        // Дозировки
-        const doseStarter = parseFloat(document.getElementById('doseStarter').value) || 0.2; // g/L
-        const doseEnzyme = parseFloat(document.getElementById('doseEnzyme').value) || 0.4; // ml/L
-        const doseCa = parseFloat(document.getElementById('doseCa').value) || 0.3; // g/L
-
-        const K = getK(targetFatDM);
-        const protein = milk.protein;
-        
-        // Требуемая жирность нормализованного молока: Ж_нм = К × Б × Ж_св / 100
-        // Ж_св - желаемая массовая доля жира в сухом веществе (targetFatDM)
-        const targetMilkFat = (K * protein * targetFatDM) / 100;
-
-        const resBox = document.getElementById('resultBox');
-        
-        if (targetMilkFat <= 0) {
-            resBox.className = 'result-box error';
-            resBox.innerHTML = 'Ошибка расчёта требуемой жирности молока. Проверьте содержание белка.';
-            return;
-        }
-
-        // Расчет нормализации (аналогично milk.html)
-        const massMilk = litersToKg(milk.volume, milk.density);
-        let addName, addFat, addDen;
-        
-        if (targetMilkFat < milk.fat) {
-            addName = 'обрата';
-            addFat = CONFIG.fat.skimmedMilk;
-            addDen = CONFIG.densities.skimmedMilk;
-        } else if (targetMilkFat > milk.fat) {
-            addName = 'сливок (20%)';
-            addFat = CONFIG.fat.creamDefault;
-            addDen = CONFIG.densities.cream;
-        } else {
-            addName = 'нет (жирность совпадает)';
-            addFat = 0; addDen = 0;
-        }
-
-        let volAdd = 0, massAdd = 0, totalVolNorm = milk.volume;
-
-        if (addFat !== 0) {
-            massAdd = massMilk * (milk.fat - targetMilkFat) / (targetMilkFat - addFat);
-            volAdd = kgToLiters(massAdd, addDen);
-            totalVolNorm = milk.volume + volAdd;
-        }
-
-        // Дозировки
-        const massStarter = totalVolNorm * doseStarter;
-        const volEnzyme = totalVolNorm * doseEnzyme;
-        const massCa = totalVolNorm * doseCa;
-
-        // Перевод в ложки
-        const starterTsp = massStarter / CONFIG.spoons.tspGram;
-        const starterTbsp = massStarter / CONFIG.spoons.tbspGram;
-        
-        const enzymeTsp = volEnzyme / CONFIG.spoons.tspMl;
-        const enzymeTbsp = volEnzyme / CONFIG.spoons.tbspMl;
-
-        const caTsp = massCa / CONFIG.spoons.tspGram;
-        const caTbsp = massCa / CONFIG.spoons.tbspGram;
-
-        let normText = addFat !== 0 
-            ? `Добавьте <strong>${formatNum(volAdd)} л</strong> ${addName} для получения жирности смеси ${formatNum(targetMilkFat, 2)}%.`
-            : `Жирность молока соответствует требуемой (${formatNum(targetMilkFat, 2)}%). Добавки не нужны.`;
-
-        const html = `
-            <h3>1. Нормализация под сыр</h3>
-            <p>Требуемая жирность молока: <strong>${formatNum(targetMilkFat, 2)}%</strong> (Коэф. K=${formatNum(K, 2)})</p>
-            <p>${normText}</p>
-            <p>Объём нормализованной смеси: <strong>${formatNum(totalVolNorm)} л</strong></p>
-            
-            <h3>2. Дозировка ингредиентов</h3>
-            <div class="table-responsive">
-                <table>
-                    <tr><th>Ингредиент</th><th>Грамм/мл</th><th>Чайные ложки</th><th>Столовые ложки</th></tr>
-                    <tr><td>Закваска</td><td>${formatNum(massStarter)} г</td><td>~${formatNum(starterTsp, 1)}</td><td>~${formatNum(starterTbsp, 1)}</td></tr>
-                    <tr><td>Фермент</td><td>${formatNum(volEnzyme)} мл</td><td>~${formatNum(enzymeTsp, 1)}</td><td>~${formatNum(enzymeTbsp, 1)}</td></tr>
-                    <tr><td>CaCl₂</td><td>${formatNum(massCa)} г</td><td>~${formatNum(caTsp, 1)}</td><td>~${formatNum(caTbsp, 1)}</td></tr>
-                </table>
-            </div>
-
-            <h3>3. После созревания (Расчёт факта)</h3>
-            <div class="form-group" style="background:#fff; padding:10px; border:1px solid #eee; margin-top:10px;">
-                <label>Фактическая масса сыра (кг):</label>
-                <input type="number" id="factMass" placeholder="Например, 10.5">
-                <label>Жирность сыра (%):</label>
-                <input type="number" id="factFat" placeholder="Например, 20">
-                <label>Влажность сыра (%):</label>
-                <input type="number" id="factMoisture" placeholder="Например, 45">
-                <button type="button" class="btn" onclick="calcCheeseFact()">Рассчитать показатели</button>
-                <div id="factResult" style="margin-top:10px; font-weight:bold;"></div>
-            </div>
-        `;
-
-        resBox.className = 'result-box success';
-        resBox.innerHTML = html;
-
-        // Глобальная функция для внутреннего расчёта факта
-        window.calcCheeseFact = function() {
-            const m = parseFloat(document.getElementById('factMass').value);
-            const f = parseFloat(document.getElementById('factFat').value);
-            const w = parseFloat(document.getElementById('factMoisture').value);
-            
-            if (!m || !f || !w) {
-                document.getElementById('factResult').innerHTML = '<span style="color:red">Заполните все поля</span>';
-                return;
-            }
-
-            const factFatDM = (f * 100) / (100 - w);
-            const yieldPercent = (m / (litersToKg(totalVolNorm, CONFIG.densities.milk))) * 100; // Грубо, лучше на массу смеси
-
-            document.getElementById('factResult').innerHTML = 
-                `Фактический МДЖСВ: <span style="color:#2c3e50">${formatNum(factFatDM, 1)}%</span><br>` +
-                `Выход сыра от смеси: <span style="color:#2c3e50">${formatNum(yieldPercent, 1)}%</span>`;
-        };
-
-        document.getElementById('saveJournalBtn').onclick = () => {
-            addToJournal({
-                type: 'cheese',
-                input: { ...milk, targetFatDM, doseStarter, doseEnzyme, doseCa },
-                results: { targetMilkFat, totalVolNorm }
-            });
-            alert('Расчёт сохранён в журнал!');
-        };
-        document.getElementById('saveJournalBtn').style.display = 'inline-block';
-    });
-}
-
-// --- Логика страницы JOURNAL ---
 function initJournal() {
-    renderJournal();
-    document.getElementById('clearBtn').addEventListener('click', clearJournal);
-}
+    const list = document.getElementById('journal-list');
+    const emptyMsg = document.getElementById('empty-msg');
+    const journal = getData(STORAGE.JOURNAL) || [];
 
-function renderJournal() {
-    const list = document.getElementById('journalList');
-    const data = getJournal();
-    list.innerHTML = '';
-
-    if (data.length === 0) {
-        list.innerHTML = '<p style="text-align:center; color:#777;">Журнал пуст.</p>';
+    if (journal.length === 0) {
+        emptyMsg.style.display = 'block';
         return;
     }
 
-    data.forEach(entry => {
-        const div = document.createElement('div');
-        div.className = 'journal-entry';
-        
-        let typeName = '';
-        switch(entry.type) {
-            case 'milk': typeName = 'Питьевое молоко'; break;
-            case 'separation': typeName = 'Сепарирование'; break;
-            case 'cottagecheese': typeName = 'Творог'; break;
-            case 'cheese': typeName = 'Сыр'; break;
-            default: typeName = entry.type;
-        }
-
-        div.innerHTML = `
-            <div class="journal-date">${entry.dateStr}</div>
-            <div class="journal-type">${typeName}</div>
-            <div class="journal-details hidden">
-                <p><strong>Входные данные:</strong> ${JSON.stringify(entry.input).replace(/[{"}]/g, '').substring(0, 100)}...</p>
-                <p><strong>Результат:</strong> ${entry.results.html ? 'См. подробный расчёт' : JSON.stringify(entry.results).replace(/[{"}]/g, '').substring(0, 100)}...</p>
-            </div>
-        `;
-
-        div.addEventListener('click', () => {
-            const details = div.querySelector('.journal-details');
-            details.classList.toggle('hidden');
+    journal.forEach((item, index) => {
+        const card = document.createElement('div');
+        card.className = 'card btn-card';
+        card.innerHTML = `<h3>${item.date}</h3><p>Сценарий: ${item.scenario === 'milk' ? 'Молоко/Творог' : 'Сыр'}</p>`;
+        card.addEventListener('click', () => {
+            openModal(item);
         });
+        list.appendChild(card);
+    });
 
-        list.appendChild(div);
+    document.getElementById('clear-journal').addEventListener('click', () => {
+        if(confirm('Очистить весь журнал?')) {
+            clearData(STORAGE.JOURNAL);
+            location.reload();
+        }
+    });
+
+    document.getElementById('export-csv').addEventListener('click', () => {
+        let csv = 'Date,Scenario,Results\n';
+        journal.forEach(j => {
+            csv += `"${j.date}","${j.scenario}","${j.results.replace(/"/g, '""')}"\n`;
+        });
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'cifromilk_journal.csv';
+        a.click();
     });
 }
+
+/* --- MODAL --- */
+function openModal(item) {
+    const modal = document.getElementById('modal');
+    const body = document.getElementById('modal-body');
+    const title = document.getElementById('modal-title');
+    
+    title.textContent = `Запись от ${item.date}`;
+    body.innerHTML = `<pre style="white-space: pre-wrap; background:#f4f4f4; padding:10px;">${item.results}</pre>`;
+    modal.style.display = 'block';
+
+    document.getElementById('copy-details').onclick = () => {
+        navigator.clipboard.writeText(item.results).then(() => showToast('Скопировано'));
+    };
+}
+
+document.addEventListener('click', (e) => {
+    const modal = document.getElementById('modal');
+    if (e.target === modal || e.target.className === 'close-modal') {
+        modal.style.display = 'none';
+    }
+});
+
+/* --- ROUTING --- */
+document.addEventListener('DOMContentLoaded', () => {
+    const path = window.location.pathname;
+    if (path.includes('index.html') || path.endsWith('/')) initIndex();
+    else if (path.includes('choose-direction.html')) initChoose();
+    else if (path.includes('scenario-milk.html')) initScenarioMilk();
+    else if (path.includes('scenario-cheese.html')) initScenarioCheese();
+    else if (path.includes('journal.html')) initJournal();
+});

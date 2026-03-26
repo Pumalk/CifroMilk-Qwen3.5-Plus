@@ -3,34 +3,38 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Журнал расчётов</title>
+    <title>ЦифроМлк - Журнал</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <header>
-        <h1>📋 Журнал расчётов</h1>
-        <nav>
-            <a href="index.html">Ввод данных</a>
-            <a href="milk.html">Молоко</a>
-            <a href="separation.html">Сепарирование</a>
-            <a href="cottagecheese.html">Творог</a>
-            <a href="cheese.html">Сыр</a>
-            <a href="journal.html" class="active">Журнал</a>
-        </nav>
-    </header>
-
     <div class="container">
-        <div class="card">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-                <h2>История операций</h2>
-                <button id="clearBtn" class="btn btn-accent" style="width:auto; padding:10px 20px; font-size:14px;">Очистить журнал</button>
+        <header>
+            <h1>Журнал расчётов</h1>
+            <a href="choose-direction.html" class="back-link">← Назад</a>
+        </header>
+        <main>
+            <div class="actions mb-4">
+                <button id="export-csv" class="btn btn-secondary">Экспорт CSV</button>
+                <button id="clear-journal" class="btn btn-danger">Очистить журнал</button>
             </div>
-            
-            <div id="journalList">
+            <div id="journal-list" class="grid-2">
                 <!-- Записи будут здесь -->
             </div>
+            <p id="empty-msg" style="display:none; text-align:center; color:#666;">Журнал пуст</p>
+        </main>
+    </div>
+
+    <!-- Модальное окно -->
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h2 id="modal-title">Детали</h2>
+            <div id="modal-body"></div>
+            <button id="copy-details" class="btn btn-secondary mt-2">Копировать текст</button>
         </div>
     </div>
+
+    <div id="toast-container"></div>
     <script src="script.js"></script>
 </body>
 </html>
