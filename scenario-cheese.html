@@ -44,12 +44,20 @@
                 </div>
                 <div class="grid-2">
                     <div class="form-group">
-                        <label for="starter-rate">Закваска (г/л)</label>
-                        <input type="number" id="starter-rate" step="0.1" min="0" value="0.2">
+                        <label for="starter-milk-vol">Объём молока на пакет закваски (л)</label>
+                        <input type="number" id="starter-milk-vol" step="1" min="1" value="250">
                     </div>
                     <div class="form-group">
-                        <label for="enzyme-rate">Фермент (мл/л)</label>
-                        <input type="number" id="enzyme-rate" step="0.1" min="0" value="0.4">
+                        <label for="starter-mass">Масса закваски в пакете (г)</label>
+                        <input type="number" id="starter-mass" step="1" min="1" value="50">
+                    </div>
+                    <div class="form-group">
+                        <label for="enzyme-milk-vol">Объём молока на флакон фермента (л)</label>
+                        <input type="number" id="enzyme-milk-vol" step="1" min="1" value="250">
+                    </div>
+                    <div class="form-group">
+                        <label for="enzyme-vol">Объём фермента во флаконе (мл)</label>
+                        <input type="number" id="enzyme-vol" step="1" min="1" value="100">
                     </div>
                     <div class="form-group">
                         <label for="cacl2-rate">CaCl₂ (г/л)</label>

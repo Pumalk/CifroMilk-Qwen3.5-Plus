@@ -38,6 +38,7 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: tran
 .btn-block { width: 100%; display: block; }
 .btn-card { display: block; text-align: center; text-decoration: none; color: var(--text); border: 2px solid transparent; transition: 0.3s; }
 .btn-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+.btn-copy { background: var(--success); color: var(--text); padding: 8px 16px; font-size: 14px; margin-top: 10px; }
 
 .error-msg { color: var(--error); font-size: 0.9em; display: block; min-height: 1.2em; }
 .loss-input.high-loss { color: var(--error); border-color: var(--error); font-weight: bold; }
@@ -47,6 +48,10 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: tran
 .results li { margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 8px; }
 .text-error { color: var(--error); font-weight: bold; }
 .text-warning { color: var(--warning); font-weight: bold; }
+
+.recipe-card { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: var(--radius); padding: 15px; margin-bottom: 15px; }
+.recipe-card h4 { color: var(--accent); margin-bottom: 10px; }
+.recipe-card pre { white-space: pre-wrap; background: #fff; padding: 10px; border-radius: 4px; font-size: 14px; }
 
 /* Toast */
 #toast-container { position: fixed; top: 20px; right: 20px; z-index: 1000; }
